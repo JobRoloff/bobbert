@@ -1,0 +1,61 @@
+// /prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum JobEmailStatus {
+  NEW
+  TRIAGED
+  APPLIED
+  INTERVIEW
+  OFFER
+  REJECTED
+  ARCHIVED
+}
+
+enum JobEmailSource {
+  LINKEDIN
+  HANDSHAKE
+  INDEED
+  GLASSDOOR
+  OTHER
+}
+
+model JobEmail {
+  id            String        @id @default(uuid())
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // --- Gmail identity / dedupe ---
+  gmailMessageId String       @unique
+
+  // --- Email metadata (MVP list + filters) ---
+  subject       String
+  sender        String
+  senderEmail   String?
+  receivedAt    DateTime      // parsed from Gmail Date header
+  snippet       String?
+
+  // --- Content ---
+  bodyText      String?       // store text/plain if you have it
+
+  // --- Product fields ---
+  status        JobEmailStatus @default(NEW)
+  source        JobEmailSource @default(OTHER)
+
+  // Optional “job-ish” fields you can infer later
+  company       String?
+  role          String?
+  externalUrl   String?        // e.g., "View application" link if you extract it
+
+  @@index([receivedAt])
+  @@index([status])
+  @@index([source])
+  @@index([senderEmail])
+}
