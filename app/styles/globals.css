@@ -1,0 +1,243 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  /* --- 1. SETTINGS FROM YOUR OLD CONFIG --- */
+  
+  /* Container centering and padding */
+  --spacing-container-padding: 2rem;
+  
+  /* Animations (Migrated from config) */
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+
+  @keyframes accordion-down {
+    from { height: 0; }
+    to { height: var(--radix-accordion-content-height); }
+  }
+  @keyframes accordion-up {
+    from { height: var(--radix-accordion-content-height); }
+    to { height: 0; }
+  }
+
+  /* --- 2. YOUR COLORS (The Forest Green Agent Theme) --- */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  
+  /* Charts & Sidebar */
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Radius mapping */
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+}
+
+/* --- 3. UTILITY LAYER (For Container Center) --- */
+@utility container {
+  margin-inline: auto;
+  padding-inline: 2rem;
+}
+
+/* --- 4. CSS VARIABLES (Forest Green Theme) --- */
+:root {
+  --radius: 0.625rem;
+  /* ... (Keep the Light Mode variables I gave you) ... */
+  --md-sys-color-primary: rgb(0 63 44);
+  --md-sys-color-surface-tint: rgb(29 107 79);
+  --md-sys-color-on-primary: rgb(255 255 255);
+  --md-sys-color-primary-container: rgb(48 122 94);
+  --md-sys-color-on-primary-container: rgb(255 255 255);
+  --md-sys-color-secondary: rgb(37 59 49);
+  --md-sys-color-on-secondary: rgb(255 255 255);
+  --md-sys-color-secondary-container: rgb(91 114 102);
+  --md-sys-color-on-secondary-container: rgb(255 255 255);
+  --md-sys-color-tertiary: rgb(17 59 74);
+  --md-sys-color-on-tertiary: rgb(255 255 255);
+  --md-sys-color-tertiary-container: rgb(77 114 131);
+  --md-sys-color-on-tertiary-container: rgb(255 255 255);
+  --md-sys-color-error: rgb(116 0 6);
+  --md-sys-color-on-error: rgb(255 255 255);
+  --md-sys-color-error-container: rgb(207 44 39);
+  --md-sys-color-on-error-container: rgb(255 255 255);
+  --md-sys-color-background: rgb(245 251 245);
+  --md-sys-color-on-background: rgb(23 29 26);
+  --md-sys-color-surface: rgb(245 251 245);
+  --md-sys-color-on-surface: rgb(13 18 15);
+  --md-sys-color-surface-variant: rgb(219 229 222);
+  --md-sys-color-on-surface-variant: rgb(47 56 51);
+  --md-sys-color-outline: rgb(75 85 79);
+  --md-sys-color-outline-variant: rgb(102 111 105);
+  --md-sys-color-shadow: rgb(0 0 0);
+  --md-sys-color-scrim: rgb(0 0 0);
+  --md-sys-color-inverse-surface: rgb(44 50 46);
+  --md-sys-color-inverse-on-surface: rgb(236 242 237);
+  --md-sys-color-inverse-primary: rgb(140 213 180);
+  --md-sys-color-primary-fixed: rgb(48 122 94);
+  --md-sys-color-on-primary-fixed: rgb(255 255 255);
+  --md-sys-color-primary-fixed-dim: rgb(14 97 70);
+  --md-sys-color-on-primary-fixed-variant: rgb(255 255 255);
+  --md-sys-color-secondary-fixed: rgb(91 114 102);
+  --md-sys-color-on-secondary-fixed: rgb(255 255 255);
+  --md-sys-color-secondary-fixed-dim: rgb(67 90 78);
+  --md-sys-color-on-secondary-fixed-variant: rgb(255 255 255);
+  --md-sys-color-tertiary-fixed: rgb(77 114 131);
+  --md-sys-color-on-tertiary-fixed: rgb(255 255 255);
+  --md-sys-color-tertiary-fixed-dim: rgb(52 90 106);
+  --md-sys-color-on-tertiary-fixed-variant: rgb(255 255 255);
+  --md-sys-color-surface-dim: rgb(194 200 195);
+  --md-sys-color-surface-bright: rgb(245 251 245);
+  --md-sys-color-surface-container-lowest: rgb(255 255 255);
+  --md-sys-color-surface-container-low: rgb(239 245 239);
+  --md-sys-color-surface-container: rgb(228 234 228);
+  --md-sys-color-surface-container-high: rgb(216 222 217);
+  --md-sys-color-surface-container-highest: rgb(205 211 206);
+
+  /* This makes the whole app (Sidebar, Body, Cards) use your MD colors automatically */
+  --background: var(--md-sys-color-background);
+  --foreground: var(--md-sys-color-on-background);
+  --primary: var(--md-sys-color-primary);
+  --primary-foreground: var(--md-sys-color-on-primary);
+  --card: var(--md-sys-color-surface-container-lowest);
+  --card-foreground: var(--md-sys-color-on-surface);
+
+  --popover: var(--md-sys-color-surface-container-lowest);
+  --popover-foreground: var(--md-sys-color-on-surface);
+
+  --secondary: var(--md-sys-color-surface-container);
+  --secondary-foreground: var(--md-sys-color-on-surface);
+
+  --muted: var(--md-sys-color-surface-container);
+  --muted-foreground: var(--md-sys-color-on-surface-variant);
+
+  /* THIS is the usual hover background */
+  --accent: var(--md-sys-color-surface-variant);
+  --accent-foreground: var(--md-sys-color-on-surface-variant);
+
+  --border: var(--md-sys-color-outline-variant);
+  --input: var(--md-sys-color-outline-variant);
+  --ring: var(--md-sys-color-primary);
+
+  --destructive: var(--md-sys-color-error);
+  --destructive-foreground: var(--md-sys-color-on-error);
+}
+
+.dark {
+  /* ... (Keep the Forest Green Dark Mode variables I gave you) ... */
+  --md-sys-color-primary: rgb(161 236 201);
+  --md-sys-color-surface-tint: rgb(140 213 180);
+  --md-sys-color-on-primary: rgb(0 44 30);
+  --md-sys-color-primary-container: rgb(86 158 128);
+  --md-sys-color-on-primary-container: rgb(0 0 0);
+  --md-sys-color-secondary: rgb(201 226 212);
+  --md-sys-color-on-secondary: rgb(20 42 32);
+  --md-sys-color-secondary-container: rgb(126 150 137);
+  --md-sys-color-on-secondary-container: rgb(0 0 0);
+  --md-sys-color-tertiary: rgb(187 226 246);
+  --md-sys-color-on-tertiary: rgb(0 41 55);
+  --md-sys-color-tertiary-container: rgb(112 150 168);
+  --md-sys-color-on-tertiary-container: rgb(0 0 0);
+  --md-sys-color-error: rgb(255 210 204);
+  --md-sys-color-on-error: rgb(84 0 3);
+  --md-sys-color-error-container: rgb(255 84 73);
+  --md-sys-color-on-error-container: rgb(0 0 0);
+  --md-sys-color-background: rgb(15 21 18);
+  --md-sys-color-on-background: rgb(222 228 222);
+  --md-sys-color-surface: rgb(15 21 18);
+  --md-sys-color-on-surface: rgb(255 255 255);
+  --md-sys-color-surface-variant: rgb(64 73 68);
+  --md-sys-color-on-surface-variant: rgb(213 223 215);
+  --md-sys-color-outline: rgb(171 180 173);
+  --md-sys-color-outline-variant: rgb(137 147 140);
+  --md-sys-color-shadow: rgb(0 0 0);
+  --md-sys-color-scrim: rgb(0 0 0);
+  --md-sys-color-inverse-surface: rgb(222 228 222);
+  --md-sys-color-inverse-on-surface: rgb(37 43 40);
+  --md-sys-color-inverse-primary: rgb(0 83 59);
+  --md-sys-color-primary-fixed: rgb(167 242 207);
+  --md-sys-color-on-primary-fixed: rgb(0 21 12);
+  --md-sys-color-primary-fixed-dim: rgb(140 213 180);
+  --md-sys-color-on-primary-fixed-variant: rgb(0 63 44);
+  --md-sys-color-secondary-fixed: rgb(207 233 218);
+  --md-sys-color-on-secondary-fixed: rgb(1 21 13);
+  --md-sys-color-secondary-fixed-dim: rgb(179 204 190);
+  --md-sys-color-on-secondary-fixed-variant: rgb(37 59 49);
+  --md-sys-color-tertiary-fixed: rgb(193 232 252);
+  --md-sys-color-on-tertiary-fixed: rgb(0 19 28);
+  --md-sys-color-tertiary-fixed-dim: rgb(166 204 223);
+  --md-sys-color-on-tertiary-fixed-variant: rgb(17 59 74);
+  --md-sys-color-surface-dim: rgb(15 21 18);
+  --md-sys-color-surface-bright: rgb(64 70 66);
+  --md-sys-color-surface-container-lowest: rgb(4 8 6);
+  --md-sys-color-surface-container-low: rgb(25 31 28);
+  --md-sys-color-surface-container: rgb(35 41 38);
+  --md-sys-color-surface-container-high: rgb(46 52 48);
+  --md-sys-color-surface-container-highest: rgb(57 63 59);
+
+  /* This makes the whole app (Sidebar, Body, Cards) use your MD colors automatically */
+  --background: var(--md-sys-color-background);
+  --foreground: var(--md-sys-color-on-background);
+  --primary: var(--md-sys-color-primary);
+  --primary-foreground: var(--md-sys-color-on-primary);
+
+  --card: var(--md-sys-color-surface-container-lowest);
+  --card-foreground: var(--md-sys-color-on-surface);
+
+  --popover: var(--md-sys-color-surface-container-lowest);
+  --popover-foreground: var(--md-sys-color-on-surface);
+
+  --secondary: var(--md-sys-color-surface-container);
+  --secondary-foreground: var(--md-sys-color-on-surface);
+
+  --muted: var(--md-sys-color-surface-container);
+  --muted-foreground: var(--md-sys-color-on-surface-variant);
+
+  --accent: var(--md-sys-color-surface-variant);
+  --accent-foreground: var(--md-sys-color-on-surface-variant);
+
+  --border: var(--md-sys-color-outline-variant);
+  --input: var(--md-sys-color-outline-variant);
+  --ring: var(--md-sys-color-primary);
+
+  --destructive: var(--md-sys-color-error);
+  --destructive-foreground: var(--md-sys-color-on-error);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
