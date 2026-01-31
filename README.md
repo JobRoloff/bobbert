@@ -1,0 +1,4 @@
+required keys
+
+OPENAI_API_KEY
+GOOGLE_API_KEY

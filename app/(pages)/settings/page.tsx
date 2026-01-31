@@ -10,18 +10,7 @@
  */
 
 // use client because we're doing local storage stuff
-import { Loader2, CheckCircle2, XCircle, Info, Cog, Lock } from "lucide-react"
-import AuthForm from "@/components/form/Auth"
 
-interface SendResponse {
-  success: boolean
-  requestId?: string
-  messageSid?: string
-  status?: string
-  message?: string
-  error?: string
-  errorCode?: string
-}
 
 export default function Home() {
 
@@ -31,7 +20,7 @@ export default function Home() {
         <div className="mb-8 text-center">
           <h1>// For Stuff like API key input</h1>
           <div className="grid mb-6 gap-2 grid-cols-2">
-            <AuthForm/>
+            <>form component here</>
           </div>
         </div>
       </div>
