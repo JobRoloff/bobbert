@@ -6,7 +6,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 enum JobEmailStatus {
@@ -44,6 +43,7 @@ model JobEmail {
 
   // --- Content ---
   bodyText      String?       // store text/plain if you have it
+  bodyHTML      String?       // store text/html if you have it
 
   // --- Product fields ---
   status        JobEmailStatus @default(NEW)

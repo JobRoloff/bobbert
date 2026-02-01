@@ -2,6 +2,7 @@
 
 import { getJobEmails } from "@/app/actions/gmail/job-emails";
 import { Button } from "@/components/ui/button";
+import { htmlToText } from "@/lib/html-to-text";
 import { useState } from "react";
 
 export function SyncButton() {
@@ -11,9 +12,11 @@ export function SyncButton() {
   async function handleSync() {
     setIsLoading(true);
     try {
-      const emails = await getJobEmails();
-      setResult(emails);
+      const emails = await getJobEmails(); setResult(emails);
       console.log("Fetched emails:", emails);
+      for (const e of emails){
+        console.log(htmlToText(e.toString()));
+      }
     } catch (error) {
       console.error("Error fetching emails:", error);
     } finally {

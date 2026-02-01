@@ -38,6 +38,7 @@ export const JobEmailSchema = z.object({
   snippet: z.string().optional().nullable(),
 
   bodyText: z.string().optional().nullable(),
+  bodyHTML: z.string().optional().nullable(),
 
   status: JobEmailStatusSchema,
   source: JobEmailSourceSchema,
@@ -62,6 +63,7 @@ export const UpsertJobEmailInputSchema = z.object({
   snippet: z.string().optional().nullable(),
 
   bodyText: z.string().optional().nullable(),
+  bodyHTML: z.string().optional().nullable(),
 
   status: JobEmailStatusSchema.optional(),
   source: JobEmailSourceSchema.optional(),

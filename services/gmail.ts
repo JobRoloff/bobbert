@@ -1,15 +1,10 @@
 // services/gmail.ts
-/**
- * uses the GOOGLE_API_KEY environment variable and the gmail api to read emails from job applications: linkedin, handshake,
- */
 
-import { google } from "googleapis"
-import { OAuth2Client } from "google-auth-library"
+import { google, gmail_v1 } from "googleapis"
+import { simpleParser, type ParsedMail, type AddressObject } from "mailparser"
+import { htmlToText } from "@/lib/html-to-text"
 import type { UpsertJobEmailInput } from "@/lib/validation/JobEmail/JobEmail"
-import {
-  JobEmailSourceSchema,
-  JobEmailStatusSchema,
-} from "@/lib/validation/JobEmail/JobEmail"
+import { JobEmailSourceSchema, JobEmailStatusSchema } from "@/lib/validation/JobEmail/JobEmail"
 
 // Configuration interfaces
 export interface GmailServiceConfig {
@@ -19,36 +14,44 @@ export interface GmailServiceConfig {
   redirectUri?: string
 }
 
+/**
+ * Decodes Gmail base64url to UTF-8 string (- → +, _ → /).
+ */
+function decodeBase64Url(data: string): string {
+  const normalized = data.replace(/-/g, "+").replace(/_/g, "/")
+  return Buffer.from(normalized, "base64").toString("utf-8")
+}
+
 export class GmailService {
-  private auth: OAuth2Client
+  private auth: import("google-auth-library").OAuth2Client
 
   constructor(config: GmailServiceConfig) {
-    this.auth = new google.auth.OAuth2(
+    const oauth2 = new google.auth.OAuth2(
       config.clientId,
       config.clientSecret,
       config.redirectUri || "https://developers.google.com/oauthplayground"
     )
-
-    this.auth.setCredentials({
+    oauth2.setCredentials({
       refresh_token: config.refreshToken,
     })
+    this.auth = oauth2
   }
 
   /**
-   * The main tool function to be exposed to the OpenAI Agent.
-   * Scans for job application emails from specific domains or keywords.
+   * Scans for job application emails from supported domains.
    */
-  async fetchJobApplicationEmails(maxResults: number = 20): Promise<UpsertJobEmailInput[]> {
+  async fetchNewJobApplicationEmails(maxResults: number = 20): Promise<UpsertJobEmailInput[]> {
     try {
       const gmail = google.gmail({ version: "v1", auth: this.auth })
 
-      // 1. Construct a targeted query for job platforms
-      // You can expand this list (e.g., Indeed, Glassdoor, etc.)
-      const query = [
-        "from:LinkedIn <jobs-noreply@linkedin.com>",
-      ].join(" ")
+      // Improved Query: Search for any of the supported providers
+      // You can refine this using "subject:" filters if you get too much noise.
+      const query = `
+        (from:<jobs-noreply>@linkedin.com)
+      `
+        .replace(/\s+/g, " ")
+        .trim()
 
-      // 2. List message IDs
       const listResponse = await gmail.users.messages.list({
         userId: "me",
         q: query,
@@ -59,132 +62,139 @@ export class GmailService {
         return []
       }
 
-      // 3. Fetch full details for each message
-      const emailPromises = listResponse.data.messages.map(async (msg) => {
-        const detail = await gmail.users.messages.get({
-          userId: "me",
-          id: msg.id!,
-          format: "full", // 'full' is needed to get the body content
-        })
-        return this.parseEmail(detail.data)
-      })
+      const messages = listResponse.data.messages
+
+      // Note: For very large maxResults (>50), consider using p-limit to avoid rate limits
+      const emailPromises = messages
+        .filter((msg) => msg.id) // Ensure ID exists
+        .map((msg) => this.fetchAndParseOne(gmail, msg.id!))
 
       return await Promise.all(emailPromises)
-    } catch (error: any) {
-      console.error("Error fetching Gmail messages:", error?.message)
-
-      // google-auth-library often includes these
-      console.error("Error response data:", error?.response?.data)
-      console.error("Error response status:", error?.response?.status)
-
-      throw new Error(
-        `Failed to read emails: ${error?.response?.data?.error ?? error?.message ?? "Unknown error"}`
-      )
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Unknown error"
+      console.error("Error fetching Gmail messages:", errorMsg)
+      throw new Error(`Failed to read emails: ${errorMsg}`)
     }
   }
 
-  /**
-   * Helper: Parses the complex Gmail API response object into UpsertJobEmailInput format
-   */
-  private parseEmail(message: any): UpsertJobEmailInput {
-    const headers = message.payload?.headers ?? []
+  
+  private async fetchAndParseOne(
+    gmail: gmail_v1.Gmail,
+    messageId: string
+  ): Promise<UpsertJobEmailInput> {
+    let detail: gmail_v1.Schema$Message
 
-    // Extract metadata
-    const subject =
-      headers.find((h: any) => h.name === "Subject")?.value || "No Subject"
-    const fromHeader =
-      headers.find((h: any) => h.name === "From")?.value || "Unknown Sender"
-    const dateStr = headers.find((h: any) => h.name === "Date")?.value || ""
-
-    // Extract sender email from "Name <email@domain.com>" if present
-    const senderEmailMatch = fromHeader.match(/<([^>]+)>/)
-    const senderEmail = senderEmailMatch?.[1] ?? null
-    const sender = fromHeader
-
-    // Parse received date
-    const receivedAt = dateStr ? new Date(dateStr) : new Date()
-
-    // Extract body text and HTML (Gmail bodies can be multipart/alternative)
-    let bodyText = ""
-    if (message.payload.parts) {
-      const { text } = this.extractBodyFromParts(message.payload.parts)
-      bodyText = text
-    } else if (message.payload.body?.data) {
-      const normalizeBase64 = (s: string) =>
-        s.replace(/-/g, "+").replace(/_/g, "/")
-      bodyText = Buffer.from(
-        normalizeBase64(message.payload.body.data),
-        "base64"
-      ).toString("utf-8")
+    try {
+      const res = await gmail.users.messages.get({
+        userId: "me",
+        id: messageId,
+        format: "raw", // Raw is required for mailparser
+      })
+      detail = res.data
+    } catch (err) {
+      console.error(`Gmail get failed for message ${messageId}:`, err)
+      return this.fallbackMessage(messageId, "Error retrieving message content")
     }
-    bodyText = bodyText || message.snippet || null
 
-    // Infer source from sender/domain
-    const source = this.inferSource(fromHeader)
+    const rawB64 = detail.raw
+    const snippet = detail.snippet || null
+
+    if (!rawB64) {
+      return this.fallbackMessage(messageId, snippet)
+    }
+
+    let parsed: ParsedMail
+    try {
+      const raw = decodeBase64Url(rawB64)
+      parsed = await simpleParser(raw)
+    } catch (err) {
+      console.error(`mailparser failed for message ${messageId}:`, err)
+      return this.fallbackMessage(messageId, snippet)
+    }
+
+    // Extraction Logic
+    const subject = parsed.subject?.trim() || "No Subject"
+
+    // mailparser normalizes 'from' into an object or array of objects
+    const fromAddress = this.extractAddressObject(parsed.from)
+    const sender = fromAddress?.name || fromAddress?.address || "Unknown Sender"
+    const senderEmail = fromAddress?.address || null
+
+    const receivedAt = parsed.date || new Date()
+
+    // Body Priority: Text -> HTML converted -> Snippet
+    let bodyText: string | null = parsed.text?.trim() || null
+    if (!bodyText && parsed.html) {
+      bodyText = htmlToText(parsed.html as string).trim() || null
+    }
+    if (!bodyText && snippet) {
+      bodyText = snippet
+    }
+
+    const bodyHTML = typeof parsed.html === "string" ? parsed.html.trim() : null
+    const source = this.inferSource(sender, senderEmail, bodyText)
 
     return {
-      gmailMessageId: message.id,
-
+      gmailMessageId: messageId,
       subject,
       sender,
       senderEmail,
       receivedAt,
-      snippet: message.snippet ?? null,
-      bodyText: bodyText || null,
-
+      snippet,
+      bodyText,
+      bodyHTML,
       status: JobEmailStatusSchema.enum.NEW,
       source,
+      company: null, // To be extracted by LLM later
+      role: null, // To be extracted by LLM later
+      externalUrl: null,
+    }
+  }
 
+  /**
+   * Helper to safely extract the first address object from mailparser's structure
+   */
+  private extractAddressObject(from: ParsedMail["from"]): AddressObject["value"][0] | null {
+    if (!from) return null
+
+    // 'from' is usually an object with a 'value' array
+    if (typeof from === "object" && "value" in from && Array.isArray(from.value)) {
+      return from.value[0] || null
+    }
+
+    return null
+  }
+
+  private fallbackMessage(messageId: string, snippet: string | null): UpsertJobEmailInput {
+    return {
+      gmailMessageId: messageId,
+      subject: "No Subject",
+      sender: "Unknown Sender",
+      senderEmail: null,
+      receivedAt: new Date(),
+      snippet,
+      bodyText: snippet,
+      bodyHTML: null,
+      status: JobEmailStatusSchema.enum.NEW,
+      source: JobEmailSourceSchema.enum.OTHER,
       company: null,
       role: null,
       externalUrl: null,
     }
   }
 
-  /**
-   * Infers job email source from sender address or display name
-   */
-  private inferSource(sender: string): "LINKEDIN" | "HANDSHAKE" | "INDEED" | "GLASSDOOR" | "OTHER" {
-    const lower = sender.toLowerCase()
-    if (lower.includes("linkedin")) return JobEmailSourceSchema.enum.LINKEDIN
-    if (lower.includes("handshake")) return JobEmailSourceSchema.enum.HANDSHAKE
-    if (lower.includes("indeed")) return JobEmailSourceSchema.enum.INDEED
-    if (lower.includes("glassdoor")) return JobEmailSourceSchema.enum.GLASSDOOR
+  private inferSource(
+    senderName: string,
+    senderEmail: string | null,
+    bodyText: string | null
+  ): "LINKEDIN" | "HANDSHAKE" | "INDEED" | "GLASSDOOR" | "OTHER" {
+    const combined = `${senderName} ${senderEmail || ""} ${bodyText || ""}`.toLowerCase()
+
+    if (combined.includes("linkedin")) return JobEmailSourceSchema.enum.LINKEDIN
+    if (combined.includes("handshake")) return JobEmailSourceSchema.enum.HANDSHAKE
+    if (combined.includes("indeed")) return JobEmailSourceSchema.enum.INDEED
+    if (combined.includes("glassdoor")) return JobEmailSourceSchema.enum.GLASSDOOR
+
     return JobEmailSourceSchema.enum.OTHER
-  }
-
-  /**
-   * Recursive helper to find text/plain and text/html content in multipart emails
-   */
-  private extractBodyFromParts(parts: any[]): {
-    text: string
-    html: string | null
-  } {
-    let text = ""
-    let html: string | null = null
-
-    for (const part of parts) {
-      if (part.mimeType === "text/plain" && part.body?.data) {
-        const normalizeBase64 = (s: string) =>
-          s.replace(/-/g, "+").replace(/_/g, "/")
-        text += Buffer.from(
-          normalizeBase64(part.body.data),
-          "base64"
-        ).toString("utf-8")
-      } else if (part.mimeType === "text/html" && part.body?.data) {
-        const normalizeBase64 = (s: string) =>
-          s.replace(/-/g, "+").replace(/_/g, "/")
-        html = Buffer.from(
-          normalizeBase64(part.body.data),
-          "base64"
-        ).toString("utf-8")
-      } else if (part.parts) {
-        const nested = this.extractBodyFromParts(part.parts)
-        text += nested.text
-        if (nested.html) html = nested.html
-      }
-    }
-
-    return { text, html }
   }
 }

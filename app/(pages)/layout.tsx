@@ -22,7 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           >
             <AppSidebar variant="inset" />
             <SidebarInset>
-              <SiteHeader />
+              {/* <SiteHeader /> */}
               <div className="flex flex-1 flex-col">{children}</div>
             </SidebarInset>
           </SidebarProvider>

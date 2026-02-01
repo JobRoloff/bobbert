@@ -1,16 +1,13 @@
-// app/(pages)/job-applications/page.tsx
-
-import { getJobEmails } from "@/app/actions/gmail/job-emails"
-import { Button } from "@/components/ui/button"
-import { getJobApplicationEmails } from "@/services/prisma"
-import { SyncButton } from "./sync-button"
+// app/(pages)/job-applications/page.tsx (Server Component – fetches data; Prisma stays on server)
+import { getCachedJobApplicationEmails } from "@/services/prisma"
+import { JobApplicationsTable } from "./JobApplicationsTable"
 
 export default async function Page() {
-  const emails = await getJobApplicationEmails(50)
+  const emails = await getCachedJobApplicationEmails(50)
   return (
     <>
       <h1>Your Individual job application data</h1>
-      <SyncButton />
+      <JobApplicationsTable emails={emails} />
     </>
   )
 }

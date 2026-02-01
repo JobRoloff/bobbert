@@ -1,17 +1,16 @@
-"use server";
+"use server"
 
-import { getGmailService } from "@/services/gmail.server";
-import { prisma } from "@/lib/prisma"; // prisma or your db client
-import { revalidatePath } from "next/cache";
+import { getGmailService } from "@/services/gmail.server"
+import { revalidatePath, revalidateTag } from "next/cache"
 
-export async function getJobEmails(){
+export async function getJobEmails() {
   const gmail = getGmailService()
-  const emails = await gmail.fetchJobApplicationEmails(20);
+  const emails = await gmail.fetchNewJobApplicationEmails(20)
   return emails
 }
 export async function syncJobEmails() {
-  const gmail = getGmailService();
-  const emails = await gmail.fetchJobApplicationEmails(25);
+  const gmail = getGmailService()
+  const emails = await gmail.fetchNewJobApplicationEmails(25)
 
   // Upsert into your DB (shape matches UpsertJobEmailInput from lib/validation/JobEmail)
   // If you're using Prisma, this is typically db.jobEmail.upsert(...)
@@ -28,7 +27,7 @@ export async function syncJobEmails() {
     //     receivedAt: e.receivedAt,
     //     snippet: e.snippet,
     //     bodyText: e.bodyText,
-    //     bodyHtml: e.bodyHtml,
+    //     bodyHTML: e.bodyHTML,
     //     rawHeaders: e.rawHeaders,
     //     status: e.status,
     //     source: e.source,
@@ -45,6 +44,7 @@ export async function syncJobEmails() {
     //     receivedAt: e.receivedAt,
     //     snippet: e.snippet,
     //     bodyText: e.bodyText,
+    //     bodyHTML: e.bodyHTML,
     //     status: e.status,
     //     source: e.source,
     //     company: e.company,
@@ -54,8 +54,9 @@ export async function syncJobEmails() {
     // });
   }
 
-  // refresh the page after syncing
-  revalidatePath("/job-applicattions");
+  // a cache tag is a label you attach to cached data. It's a simple string that names the cache entry. This is used when (creating the cache && invalidating )
+  revalidateTag("job-emails", "max")
+  revalidatePath("/job-applications")
   console.log("emails:", emails)
-  return { synced: emails.length };
+  return { synced: emails.length }
 }
