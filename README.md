@@ -13,18 +13,18 @@ Built for the **early pipeline**: applying consistently, tracking status, and fo
 
 ## What it looks like
 
-- **Dashboard**
+**Dashboard**
   - “Sync ToDo’s” button
   - List of due follow-ups (company / role / applied date)
   - “View draft email” → opens a Sheet with subject/body and Copy
 
-- ![todos](./public/documentation/todos.png)
+![todos](./public/documentation/todos.png)
 
-- **Job Applications**
-- ![Job applications table](./public/documentation/job-applications-table.png)
+**Job Applications**
+![Job applications table](./public/documentation/job-applications-table.png)
 
-- **Job Applications: side panel**
-- ![side panel](./public/documentation/job-application-email-details-panel.png)
+**Job Applications: side panel**
+![side panel](./public/documentation/job-application-email-details-panel.png)
 
 ---
 
@@ -81,7 +81,7 @@ UI:
 
 ---
 
-## Project structure (suggested)
+## Project structure
 
 ```txt
 app/
