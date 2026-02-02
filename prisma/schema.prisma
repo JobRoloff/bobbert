@@ -18,8 +18,8 @@ enum JobEmailStatus {
 }
 
 model Job {
-  id              String   @id @default(uuid())
-  createdAt       DateTime @default(now())
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
 
   role            String?
   company         String?
@@ -27,40 +27,81 @@ model Job {
   applicationLink String?
 
   // Relation back to the email this recommendation came from
-  jobEmailId      String
-  jobEmail        JobEmail @relation(fields: [jobEmailId], references: [id], onDelete: Cascade)
+  jobEmailId String
+  jobEmail   JobEmail @relation(fields: [jobEmailId], references: [id], onDelete: Cascade)
 
   @@index([jobEmailId])
 }
 
 model JobEmail {
-  id            String        @id @default(uuid())
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // --- Parsed application details (from the email content) ---
-  appliedDate      DateTime?   // better than String
-  roleTitle        String?
-  companyName      String?
-  location         String?
-  applicationLink  String?     // the job’s application link
-  jobLink          String?     // if you want separate from applicationLink
-  externalUrl      String?     // e.g. "Open in Gmail" or primary CTA
+  appliedDate     DateTime? // better than String
+  roleTitle       String?
+  companyName     String?
+  location        String?
+  applicationLink String? // the job’s application link
+  jobLink         String? // if you want separate from applicationLink
+  externalUrl     String? // e.g. "Open in Gmail" or primary CTA
 
   // --- Recommended jobs parsed from the email ---
-  recommendedJobs  Job[]
+  recommendedJobs Job[]
 
   // --- Gmail identity / dedupe ---
-  gmailMessageId   String      @unique
+  gmailMessageId String @unique
 
-  // --- Email metadata ---
-  subject          String
-
-  // --- Product fields ---
-  status           JobEmailStatus @default(NEW)
+  subject        String
+  status         JobEmailStatus  @default(NEW)
+  // NEW: drafts associated to this application
+  followUpDrafts FollowUpDraft[]
 
   @@index([status])
   @@index([appliedDate])
   @@index([companyName])
   @@index([roleTitle])
+}
+
+enum FollowUpChannel {
+  EMAIL
+  LINKEDIN
+}
+
+enum FollowUpDraftStatus {
+  DRAFT
+  SENT
+  ARCHIVED
+}
+
+model FollowUpDraft {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // relation to the application email
+  jobEmailId String
+  jobEmail   JobEmail @relation(fields: [jobEmailId], references: [id], onDelete: Cascade)
+
+  // what kind of outreach
+  channel FollowUpChannel     @default(EMAIL)
+  status  FollowUpDraftStatus @default(DRAFT)
+
+  // the actual draft content
+  subject     String?
+  body        String?
+  isGenerated Boolean @default(false)
+
+  // optional metadata (nice for “why did the agent do this?”)
+  rationale String?
+  model     String? // e.g. "gpt-5-mini" (optional)
+  tone      String? // e.g. "professional, concise" (optional)
+
+  // only one DRAFT per channel per JobEmail at a time (your click can upsert)
+  @@unique([jobEmailId, channel, status])
+  @@index([jobEmailId])
+  @@index([status])
+  @@index([channel])
+  @@index([isGenerated])
 }
