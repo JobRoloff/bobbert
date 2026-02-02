@@ -1,10 +1,11 @@
 // services/gmail.ts
 import "server-only"
 import { google, gmail_v1 } from "googleapis"
+import OpenAI from "openai"
 import { simpleParser, type ParsedMail, type AddressObject } from "mailparser"
-import { htmlToText } from "@/lib/html-to-text"
+import { htmlToText, parseEmailHtmlToObject } from "@/lib/html-to-text"
 import type { UpsertJobEmailInput } from "@/lib/validation/JobEmail/JobEmail"
-import { JobEmailSourceSchema, JobEmailStatusSchema } from "@/lib/validation/JobEmail/JobEmail"
+import { JobEmailStatusSchema } from "@/lib/validation/JobEmail/JobEmail"
 
 export interface GmailServiceConfig {
   clientId: string
@@ -21,6 +22,28 @@ function decodeBase64Url(data: string): string {
   return Buffer.from(normalized, "base64").toString("utf-8")
 }
 
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+})
+
+function requireEnv(name: string): string {
+  const v = process.env[name]
+  if (!v) throw new Error(`Missing required env var: ${name}`)
+  return v
+}
+
+type LlmExtract = {
+  status: zodEnumValue<typeof JobEmailStatusSchema> // helper type below
+  appliedDate: string | null // ISO date string or null
+  company: string | null
+  role: string | null
+  location: string | null
+  jobLink: string | null
+  externalUrl: string | null
+}
+
+type zodEnumValue<T extends { enum: Record<string, string> }> = T["enum"][keyof T["enum"]]
+
 export class GmailService {
   private auth: import("google-auth-library").OAuth2Client
 
@@ -35,16 +58,6 @@ export class GmailService {
     })
     this.auth = oauth2
   }
-  public async syncJobEmails(maxResults: number = 25) {
-    const parsed = await this.pollNewJobApplicationEmails(maxResults)
-
-    // optional: if you want to avoid upserting the same ones every time,
-    // filter existing ids first (shown below)
-    // await this.saveJobApplicationEmails(parsed)
-
-    return { fetched: parsed.length }
-  }
-
   /**
    * Scans for job application emails from supported domains.
    */
@@ -52,8 +65,6 @@ export class GmailService {
     try {
       const gmail = google.gmail({ version: "v1", auth: this.auth })
 
-      // Improved Query: Search for any of the supported providers
-      // You can refine this using "subject:" filters if you get too much noise.
       const query = `
         (from:<jobs-noreply>@linkedin.com)
       `
@@ -66,144 +77,231 @@ export class GmailService {
         maxResults: maxResults,
       })
 
-      if (!listResponse.data.messages || listResponse.data.messages.length === 0) {
-        return []
-      }
+      const messages = listResponse.data.messages ?? []
+      if (messages.length === 0) return []
 
-      const messages = listResponse.data.messages
+      const jobs = messages
+        .filter((m) => m.id)
+        .map(async (m) => {
+          const messageId = m.id!
+          const { rawB64, snippet } = await this.fetchMessageRaw(gmail, messageId)
+          return this.parseMessageToUpsert({ messageId, rawB64, snippet })
+        })
 
-      // Note: For very large maxResults (>50), consider using p-limit to avoid rate limits
-      const emailPromises = messages
-        .filter((msg) => msg.id) // Ensure ID exists
-        .map((msg) => this.fetchAndParseOne(gmail, msg.id!))
-
-      return await Promise.all(emailPromises)
+      const results = await Promise.allSettled(jobs)
+      const output : UpsertJobEmailInput[] = results
+        .filter((r): r is PromiseFulfilledResult<UpsertJobEmailInput> => r.status === "fulfilled")
+        .map((r) => r.value)
+      console.log("polled emails: ", output)
+      return output
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : "Unknown error"
       console.error("Error fetching Gmail messages:", errorMsg)
       throw new Error(`Failed to read emails: ${errorMsg}`)
     }
   }
-
-
-
-  private async fetchAndParseOne(
+  /** Fetch only. No parsing. */
+  private async fetchMessageRaw(
     gmail: gmail_v1.Gmail,
     messageId: string
-  ): Promise<UpsertJobEmailInput> {
-    let detail: gmail_v1.Schema$Message
-
+  ): Promise<{ rawB64: string | null; snippet: string | null }> {
     try {
       const res = await gmail.users.messages.get({
         userId: "me",
         id: messageId,
-        format: "raw", // Raw is required for mailparser
+        format: "raw",
       })
-      detail = res.data
+      return {
+        rawB64: res.data.raw ?? null,
+        snippet: res.data.snippet ?? null,
+      }
     } catch (err) {
       console.error(`Gmail get failed for message ${messageId}:`, err)
-      return this.fallbackMessage(messageId, "Error retrieving message content")
+      return { rawB64: null, snippet: null }
     }
+  }
+  
 
-    const rawB64 = detail.raw
-    const snippet = detail.snippet || null
+  /** Parse + infer. No fetching. */
+  private async parseMessageToUpsert(args: {
+    messageId: string
+    rawB64: string | null
+    snippet: string | null
+  }): Promise<UpsertJobEmailInput> {
+    const { messageId, rawB64, snippet } = args
 
     if (!rawB64) {
-      return this.fallbackMessage(messageId, snippet)
+      return {
+        gmailMessageId: messageId,
+        subject: "No Subject",
+        status: JobEmailStatusSchema.enum.NEW,
+        appliedDate: null,
+        role: null,
+        jobLink: null,
+        externalUrl: null,
+        location: null,
+      }
     }
 
-    let parsed: ParsedMail
+    let mail: ParsedMail
     try {
       const raw = decodeBase64Url(rawB64)
-      parsed = await simpleParser(raw)
+      mail = await simpleParser(raw)
     } catch (err) {
       console.error(`mailparser failed for message ${messageId}:`, err)
-      return this.fallbackMessage(messageId, snippet)
+      return {
+        gmailMessageId: messageId,
+        subject: "No Subject",
+        status: JobEmailStatusSchema.enum.NEW,
+        appliedDate: null,
+        role: null,
+        jobLink: null,
+        externalUrl: null,
+        location: null,
+      }
     }
 
-    // Extraction Logic
-    const subject = parsed.subject?.trim() || "No Subject"
+    const subject = mail.subject?.trim() || "No Subject"
+    const html = typeof mail.html === "string" ? mail.html : null
 
-    // mailparser normalizes 'from' into an object or array of objects
-    const fromAddress = this.extractAddressObject(parsed.from)
-    const sender = fromAddress?.name || fromAddress?.address || "Unknown Sender"
-    const senderEmail = fromAddress?.address || null
+    // Canonical “content” for inference: HTML -> parsed object -> plainText
+    const htmlParsed = html
+      ? parseEmailHtmlToObject({ html, gmailMessageId: messageId })
+      : null
 
-    const receivedAt = parsed.date || new Date()
+    const primaryText =
+      htmlParsed?.plainText?.trim() ||
+      mail.text?.trim() ||
+      snippet ||
+      ""
 
-    // Body Priority: Text -> HTML converted -> Snippet
-    let bodyText: string | null = parsed.text?.trim() || null
-    if (!bodyText && parsed.html) {
-      bodyText = htmlToText(parsed.html as string).trim() || null
-    }
-    if (!bodyText && snippet) {
-      bodyText = snippet
-    }
+    // Deterministic fallback links
+    const bestApply = htmlParsed?.links?.find((l) => l.kind === "apply")?.href ?? null
+    const bestExternal = htmlParsed?.originalEmail?.gmailUrl ?? null
 
-    const bodyHTML = typeof parsed.html === "string" ? parsed.html.trim() : null
-    const source = this.inferSource(sender, senderEmail, bodyText)
+    // LLM extraction (this is your “agentic parsing” step)
+    const llm = await this.extractJobFieldsWithLLM({
+      subject,
+      primaryText,
+      applyLinkHint: bestApply,
+    })
 
-    return {
+    // Merge: LLM result + deterministic hints
+    const jobLink = llm.jobLink ?? bestApply
+    const externalUrl = llm.externalUrl ?? bestExternal
+    const output : UpsertJobEmailInput = {
       gmailMessageId: messageId,
       subject,
-      sender,
-      senderEmail,
-      receivedAt,
-      snippet,
-      bodyText,
-      bodyHTML,
-      status: JobEmailStatusSchema.enum.NEW,
-      source,
-      company: null, // To be extracted by LLM later
-      role: null, // To be extracted by LLM later
-      externalUrl: null,
+      status: llm.status ?? JobEmailStatusSchema.enum.NEW,
+      appliedDate: llm.appliedDate ? new Date(llm.appliedDate) : null,
+      companyName: llm.company,
+      roleTitle: llm.role,
+      location: llm.location,
+      applicationLink: jobLink,
+      externalUrl: externalUrl,
     }
+    // console.log("parsed email: ", output)
+    return output
   }
 
   /**
-   * Helper to safely extract the first address object from mailparser's structure
+   * Uses OpenAI to extract structured job application fields from email content.
+   * Treat HTML-derived plain text as source of truth.
    */
-  private extractAddressObject(from: ParsedMail["from"]): AddressObject["value"][0] | null {
-    if (!from) return null
+  private async extractJobFieldsWithLLM(input: {
+    subject: string
+    primaryText: string
+    applyLinkHint: string | null
+  }): Promise<{
+    status: zodEnumValue<typeof JobEmailStatusSchema>
+    appliedDate: string | null
+    company: string | null
+    role: string | null
+    location: string | null
+    jobLink: string | null
+    externalUrl: string | null
+  }> {
+    requireEnv("OPENAI_API_KEY")
+    const model = process.env.OPENAI_MODEL || "gpt-4.1-mini"
 
-    // 'from' is usually an object with a 'value' array
-    if (typeof from === "object" && "value" in from && Array.isArray(from.value)) {
-      return from.value[0] || null
+    // Keep the context small to avoid cost + hallucination
+    const content = input.primaryText.slice(0, 8000)
+
+    const system = `
+You extract structured job-application data from job-related emails (e.g., LinkedIn job apply confirmations, interview requests).
+Return ONLY valid JSON with the exact keys:
+{
+  "status": "NEW" | "APPLIED" | "INTERVIEW" | "OFFER" | "REJECTED" | "ARCHIVED",
+  "appliedDate": string | null,   // ISO-8601 date (YYYY-MM-DD) if clearly present
+  "company": string | null,
+  "role": string | null,
+  "location": string | null,
+  "jobLink": string | null,       // link to application / job posting if present
+  "externalUrl": string | null    // optional
+}
+
+Rules:
+- If unsure, use null for fields.
+- Do NOT invent company/role.
+- Prefer explicit evidence (e.g. "You applied to X at Y").
+- If the message is clearly a rejection, status should be REJECTED.
+- If it’s an interview invite/scheduling, status should be INTERVIEW.
+- If it’s an application confirmation, status should be APPLIED.
+`.trim()
+
+    const user = `
+SUBJECT:
+${input.subject}
+
+APPLY_LINK_HINT (may be null):
+${input.applyLinkHint ?? "null"}
+
+EMAIL_TEXT:
+${content}
+`.trim()
+
+    const resp = await openai.responses.create({
+      model,
+      input: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+    })
+
+    const text = resp.output_text?.trim() || "{}"
+
+    // Very defensive parse
+    let parsed: any
+    try {
+      parsed = JSON.parse(text)
+    } catch {
+      // fallback: if model wrapped in text, try to extract JSON block
+      const match = text.match(/\{[\s\S]*\}/)
+      parsed = match ? JSON.parse(match[0]) : {}
     }
 
-    return null
-  }
+    // Normalize + validate status
+    const status = JobEmailStatusSchema.safeParse(parsed.status).success
+      ? parsed.status
+      : JobEmailStatusSchema.enum.NEW
 
-  private fallbackMessage(messageId: string, snippet: string | null): UpsertJobEmailInput {
+    // Basic normalization for appliedDate
+    const appliedDate =
+      typeof parsed.appliedDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(parsed.appliedDate)
+        ? parsed.appliedDate
+        : null
+
+    const asNullString = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null)
+
     return {
-      gmailMessageId: messageId,
-      subject: "No Subject",
-      sender: "Unknown Sender",
-      senderEmail: null,
-      receivedAt: new Date(),
-      snippet,
-      bodyText: snippet,
-      bodyHTML: null,
-      status: JobEmailStatusSchema.enum.NEW,
-      source: JobEmailSourceSchema.enum.OTHER,
-      company: null,
-      role: null,
-      externalUrl: null,
+      status,
+      appliedDate,
+      company: asNullString(parsed.company),
+      role: asNullString(parsed.role),
+      location: asNullString(parsed.location),
+      jobLink: asNullString(parsed.jobLink),
+      externalUrl: asNullString(parsed.externalUrl),
     }
   }
 
-  private inferSource(
-    senderName: string,
-    senderEmail: string | null,
-    bodyText: string | null
-  ): "LINKEDIN" | "HANDSHAKE" | "INDEED" | "GLASSDOOR" | "OTHER" {
-    const combined = `${senderName} ${senderEmail || ""} ${bodyText || ""}`.toLowerCase()
-
-    if (combined.includes("linkedin")) return JobEmailSourceSchema.enum.LINKEDIN
-    if (combined.includes("handshake")) return JobEmailSourceSchema.enum.HANDSHAKE
-    if (combined.includes("indeed")) return JobEmailSourceSchema.enum.INDEED
-    if (combined.includes("glassdoor")) return JobEmailSourceSchema.enum.GLASSDOOR
-
-    return JobEmailSourceSchema.enum.OTHER
-  }
 }

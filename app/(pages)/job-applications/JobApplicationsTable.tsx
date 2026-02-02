@@ -41,46 +41,26 @@ export function JobApplicationsTable({
     <Table className="w-fit mx-auto bg-[--md-sys-color-primary]">
       <TableHeader>
         <TableRow>
-          <TableHead className="w-[100px]">Source</TableHead>
+          <TableHead>Company Name</TableHead>
+          <TableHead>Role</TableHead>
           <TableHead>Date Applied</TableHead>
           <TableHead>Status</TableHead>
-          <TableHead className="text-right">Actions</TableHead>
+          <TableHead className="text-right">View / Edit</TableHead>
         </TableRow>
       </TableHeader>
 
       <TableBody>
         {emails.map((email) => (
           <TableRow key={email.id ?? email.gmailMessageId}>
-            <TableCell className="font-medium">{email.sender}</TableCell>
+            <TableCell className="font-medium">{email.companyName}</TableCell>
+            <TableCell className="font-medium">{email.roleTitle}</TableCell>
             <TableCell title={toDate(email.createdAt).toISOString()}>
               {formatDateApplied(email.createdAt)}
             </TableCell>
             <TableCell className="font-medium">{email.status}</TableCell>
 
             <TableCell className="text-right">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="size-8">
-                    <MoreHorizontalIcon />
-                    <span className="sr-only">Open menu</span>
-                  </Button>
-                </DropdownMenuTrigger>
-
-                <DropdownMenuContent align="start">
-                  <DropdownMenuItem onClick={() => onView(email)}>
-                    View
-                  </DropdownMenuItem>
-
-                  <DropdownMenuSeparator />
-
-                  <DropdownMenuItem
-                    variant="destructive"
-                    onClick={() => console.log("delete", email)}
-                  >
-                    Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <Button onClick={()=> onView(email)}>Details</Button>
             </TableCell>
           </TableRow>
         ))}

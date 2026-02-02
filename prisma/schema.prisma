@@ -10,7 +10,6 @@ datasource db {
 
 enum JobEmailStatus {
   NEW
-  TRIAGED
   APPLIED
   INTERVIEW
   OFFER
@@ -18,12 +17,20 @@ enum JobEmailStatus {
   ARCHIVED
 }
 
-enum JobEmailSource {
-  LINKEDIN
-  HANDSHAKE
-  INDEED
-  GLASSDOOR
-  OTHER
+model Job {
+  id              String   @id @default(uuid())
+  createdAt       DateTime @default(now())
+
+  role            String?
+  company         String?
+  location        String?
+  applicationLink String?
+
+  // Relation back to the email this recommendation came from
+  jobEmailId      String
+  jobEmail        JobEmail @relation(fields: [jobEmailId], references: [id], onDelete: Cascade)
+
+  @@index([jobEmailId])
 }
 
 model JobEmail {
@@ -31,31 +38,29 @@ model JobEmail {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
+  // --- Parsed application details (from the email content) ---
+  appliedDate      DateTime?   // better than String
+  roleTitle        String?
+  companyName      String?
+  location         String?
+  applicationLink  String?     // the job’s application link
+  jobLink          String?     // if you want separate from applicationLink
+  externalUrl      String?     // e.g. "Open in Gmail" or primary CTA
+
+  // --- Recommended jobs parsed from the email ---
+  recommendedJobs  Job[]
+
   // --- Gmail identity / dedupe ---
-  gmailMessageId String       @unique
+  gmailMessageId   String      @unique
 
-  // --- Email metadata (MVP list + filters) ---
-  subject       String
-  sender        String
-  senderEmail   String?
-  receivedAt    DateTime      // parsed from Gmail Date header
-  snippet       String?
-
-  // --- Content ---
-  bodyText      String?       // store text/plain if you have it
-  bodyHTML      String?       // store text/html if you have it
+  // --- Email metadata ---
+  subject          String
 
   // --- Product fields ---
-  status        JobEmailStatus @default(NEW)
-  source        JobEmailSource @default(OTHER)
+  status           JobEmailStatus @default(NEW)
 
-  // Optional “job-ish” fields you can infer later
-  company       String?
-  role          String?
-  externalUrl   String?        // e.g., "View application" link if you extract it
-
-  @@index([receivedAt])
   @@index([status])
-  @@index([source])
-  @@index([senderEmail])
+  @@index([appliedDate])
+  @@index([companyName])
+  @@index([roleTitle])
 }
