@@ -1,12 +1,11 @@
 // services/gmail.ts
-
+import "server-only"
 import { google, gmail_v1 } from "googleapis"
 import { simpleParser, type ParsedMail, type AddressObject } from "mailparser"
 import { htmlToText } from "@/lib/html-to-text"
 import type { UpsertJobEmailInput } from "@/lib/validation/JobEmail/JobEmail"
 import { JobEmailSourceSchema, JobEmailStatusSchema } from "@/lib/validation/JobEmail/JobEmail"
 
-// Configuration interfaces
 export interface GmailServiceConfig {
   clientId: string
   clientSecret: string
@@ -36,11 +35,20 @@ export class GmailService {
     })
     this.auth = oauth2
   }
+  public async syncJobEmails(maxResults: number = 25) {
+    const parsed = await this.pollNewJobApplicationEmails(maxResults)
+
+    // optional: if you want to avoid upserting the same ones every time,
+    // filter existing ids first (shown below)
+    // await this.saveJobApplicationEmails(parsed)
+
+    return { fetched: parsed.length }
+  }
 
   /**
    * Scans for job application emails from supported domains.
    */
-  async fetchNewJobApplicationEmails(maxResults: number = 20): Promise<UpsertJobEmailInput[]> {
+  async pollNewJobApplicationEmails(maxResults: number = 20): Promise<UpsertJobEmailInput[]> {
     try {
       const gmail = google.gmail({ version: "v1", auth: this.auth })
 
@@ -77,7 +85,8 @@ export class GmailService {
     }
   }
 
-  
+
+
   private async fetchAndParseOne(
     gmail: gmail_v1.Gmail,
     messageId: string

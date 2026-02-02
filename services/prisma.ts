@@ -1,22 +1,14 @@
 import { unstable_cache } from "next/cache"
 import { prisma } from "@/lib/prisma"
-import { JobEmail, UpsertJobEmailInput } from "@/lib/validation/JobEmail/JobEmail"
+import type { UpsertJobEmailInput } from "@/lib/validation/JobEmail/JobEmail"
+import type { JobEmail } from "@prisma/client"
 import { Prisma } from "@prisma/client"
 
-export async function getJobApplicationEmails(limit: number = 50): Promise<JobEmail[]> {
-  /**
-   * P2021 → table missing → migrate/push (Section 1)
-
-    P2022 → column missing → migrate (Section 5)
-
-    P1001/P1002 → can’t reach DB → connection/URL/DB running
-
-    P1013 → invalid DB string or configuration
-   */
+export async function getJobApplicationEmailsFromDb(limit = 50): Promise<JobEmail[]> {
   try {
     return await prisma.jobEmail.findMany({
       take: limit,
-      orderBy: {receivedAt: "desc"}
+      orderBy: { createdAt: "desc" },
     })
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError) {
@@ -29,16 +21,69 @@ export async function getJobApplicationEmails(limit: number = 50): Promise<JobEm
   }
 }
 
-// setup server side caching for the async function thattt pulls data from prisma
 const CACHE_TAG = "job-emails"
 const REVALIDATE_SECONDS = 12000
 
-/** Cached job emails for the list view. Revalidates after 60s or when revalidateTag("job-emails") is called (e.g. after sync). */
-export function getCachedJobApplicationEmails(limit: number = 50): Promise<JobEmail[]> {
-  return unstable_cache(() => getJobApplicationEmails(limit), [CACHE_TAG, String(limit)], {
-    tags: [CACHE_TAG],
-    revalidate: REVALIDATE_SECONDS,
-  })()
+const getCachedJobApplicationEmailsImpl = unstable_cache(
+  async (limit: number) => getJobApplicationEmailsFromDb(limit),
+  [CACHE_TAG],
+  { tags: [CACHE_TAG], revalidate: REVALIDATE_SECONDS }
+)
+
+export function getCachedJobApplicationEmails(limit = 50) {
+  return getCachedJobApplicationEmailsImpl(limit)
 }
 
-export async function addJobApplicationEmails(jobsToAdd: UpsertJobEmailInput[]) {}
+/**
+ * Upserts Gmail-parsed job emails into DB.
+ * Returns count of records processed.
+ */
+export async function upsertJobApplicationEmails(jobsToAdd: UpsertJobEmailInput[]) {
+  if (!jobsToAdd.length) return { upserted: 0 }
+
+  // De-dupe by gmailMessageId to avoid redundant writes
+  const seen = new Set<string>()
+  const unique = jobsToAdd.filter((j) => {
+    const id = (j.gmailMessageId ?? "").trim()
+    if (!id || seen.has(id)) return false
+    seen.add(id)
+    return true
+  })
+
+  for (const job of unique) {
+    await prisma.jobEmail.upsert({
+      where: { gmailMessageId: job.gmailMessageId },
+      create: {
+        gmailMessageId: job.gmailMessageId,
+        subject: job.subject,
+        sender: job.sender,
+        senderEmail: job.senderEmail,
+        receivedAt: job.receivedAt,
+        snippet: job.snippet,
+        bodyText: job.bodyText,
+        bodyHTML: job.bodyHTML,
+        status: job.status,
+        source: job.source,
+        company: job.company,
+        role: job.role,
+        externalUrl: job.externalUrl,
+      },
+      update: {
+        subject: job.subject,
+        sender: job.sender,
+        senderEmail: job.senderEmail,
+        receivedAt: job.receivedAt,
+        snippet: job.snippet,
+        bodyText: job.bodyText,
+        bodyHTML: job.bodyHTML,
+        status: job.status,
+        source: job.source,
+        company: job.company,
+        role: job.role,
+        externalUrl: job.externalUrl,
+      },
+    })
+  }
+
+  return { upserted: unique.length }
+}

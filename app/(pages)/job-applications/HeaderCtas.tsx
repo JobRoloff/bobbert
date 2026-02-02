@@ -1,5 +1,5 @@
-import { SyncButton } from "./sync-button"
+import { FetchFromGemailButton } from "./sync-button"
 
 export function HeaderCtas() {
-  return <SyncButton />
+  return <FetchFromGemailButton />
 }

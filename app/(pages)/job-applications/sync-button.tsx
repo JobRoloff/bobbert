@@ -1,32 +1,28 @@
-"use client";
+"use client"
 
-import { getJobEmails } from "@/app/actions/gmail/job-emails";
-import { Button } from "@/components/ui/button";
-import { htmlToText } from "@/lib/html-to-text";
-import { useState } from "react";
+import { syncJobEmails } from "@/app/actions/gmail/job-emails"
+import { Button } from "@/components/ui/button"
+import { useState } from "react"
 
-export function SyncButton() {
-  const [isLoading, setIsLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
+export function FetchFromGemailButton() {
+  const [isLoading, setIsLoading] = useState(false)
+  const [result, setResult] = useState<any>(null)
 
-  async function handleSync() {
-    setIsLoading(true);
+  async function handleFetch() {
+    setIsLoading(true)
     try {
-      const emails = await getJobEmails(); setResult(emails);
-      console.log("Fetched emails:", emails);
-      for (const e of emails){
-        console.log(htmlToText(e.toString()));
-      }
+      const emails = await syncJobEmails()
+      setResult(emails)
     } catch (error) {
-      console.error("Error fetching emails:", error);
+      console.error("Error fetching emails:", error)
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
   }
 
   return (
     <div>
-      <Button onClick={handleSync} disabled={isLoading}>
+      <Button onClick={handleFetch} disabled={isLoading}>
         {isLoading ? "Loading..." : "Fetch from Gmail"}
       </Button>
       {result && (
@@ -35,5 +31,5 @@ export function SyncButton() {
         </p>
       )}
     </div>
-  );
+  )
 }

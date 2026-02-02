@@ -1,7 +1,5 @@
-/**
- * Safe HTML → plain text: strip script/style, turn br/p into newlines, remove tags, collapse whitespace.
- * Dependency-free so it can be used in both server and client bundles.
- */
+// lib/html-to-text.ts
+
 export function htmlToText(html: string): string {
   let s = html
   s = s.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
@@ -20,6 +18,6 @@ export function htmlToText(html: string): string {
   s = s.replace(/&quot;/gi, '"')
   s = s.replace(/&#39;/g, "'")
   s = s.replace(/\s+/g, " ").replace(/\n\s+/g, "\n").trim()
-  console.log(s)
+  // console.log(s)
   return s
 }

@@ -40,3 +40,4 @@ docker-compose.yml
 /lib/validation/Auth
 app/api/cron/
 .pnpm-store/
+docs/
