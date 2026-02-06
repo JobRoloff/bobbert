@@ -1,0 +1,41 @@
+enum FollowUpChannel {
+  EMAIL
+  LINKEDIN
+}
+
+enum FollowUpDraftStatus {
+  DRAFT
+  SENT
+  ARCHIVED
+}
+
+model FollowUpDraft {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // relation to the application email
+  jobEmailId String
+  jobEmail   JobEmail @relation(fields: [jobEmailId], references: [id], onDelete: Cascade)
+
+  // what kind of outreach
+  channel FollowUpChannel     @default(EMAIL)
+  status  FollowUpDraftStatus @default(DRAFT)
+
+  // the actual draft content
+  subject     String?
+  body        String?
+  isGenerated Boolean @default(false)
+
+  // optional metadata (nice for “why did the agent do this?”)
+  rationale String?
+  model     String? // e.g. "gpt-5-mini" (optional)
+  tone      String? // e.g. "professional, concise" (optional)
+
+  // only one DRAFT per channel per JobEmail at a time (your click can upsert)
+  @@unique([jobEmailId, channel, status])
+  @@index([jobEmailId])
+  @@index([status])
+  @@index([channel])
+  @@index([isGenerated])
+}

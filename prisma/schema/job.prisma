@@ -1,0 +1,15 @@
+model Job {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  role            String?
+  company         String?
+  location        String?
+  applicationLink String?
+
+  // Relation back to the email this recommendation came from
+  jobEmailId String
+  jobEmail   JobEmail @relation(fields: [jobEmailId], references: [id], onDelete: Cascade)
+
+  @@index([jobEmailId])
+}

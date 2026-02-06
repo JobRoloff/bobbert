@@ -1,0 +1,40 @@
+enum JobEmailStatus {
+  NEW
+  APPLIED
+  INTERVIEW
+  OFFER
+  REJECTED
+  ARCHIVED
+}
+
+
+model JobEmail {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // --- Parsed application details (from the email content) ---
+  appliedDate     DateTime? // better than String
+  roleTitle       String?
+  companyName     String?
+  location        String?
+  applicationLink String? // the job’s application link
+  jobLink         String? // if you want separate from applicationLink
+  externalUrl     String? // e.g. "Open in Gmail" or primary CTA
+
+  // --- Recommended jobs parsed from the email ---
+  recommendedJobs Job[]
+
+  // --- Gmail identity / dedupe ---
+  gmailMessageId String @unique
+
+  subject        String
+  status         JobEmailStatus  @default(NEW)
+  // NEW: drafts associated to this application
+  followUpDrafts FollowUpDraft[]
+
+  @@index([status])
+  @@index([appliedDate])
+  @@index([companyName])
+  @@index([roleTitle])
+}
