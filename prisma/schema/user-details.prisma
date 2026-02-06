@@ -1,0 +1,29 @@
+enum UserDefaultTone {
+  short
+  enthusiastic
+  assertive
+  neutral
+}
+
+model UserDetails {
+  id           String           @id @default(uuid()) @db.Uuid
+
+  firstName    String           @db.VarChar(200)
+  lastName     String           @db.VarChar(200)
+  email        String           @unique @db.VarChar(320)
+
+  location     String?          @db.VarChar(200)
+  headline     String?          @db.VarChar(200)
+
+  portfolioUrl String?          @db.VarChar(2048)
+  linkedinUrl  String?          @db.VarChar(2048)
+  githubUrl    String?          @db.VarChar(2048)
+
+  defaultTone  UserDefaultTone?
+  defaultSignOff String?        @db.VarChar(100)
+
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@map("user_details")
+}
